@@ -30,7 +30,7 @@ app.post('/api/auth', loginLimiter, (req, res) => {
 
 function parseSpintax(text) {
     if (!text) return '';
-    return text.replace(/\{([^{}]+)\}/g, (match, choices) => {
+    return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
         const options = choices.split('|');
         return options[Math.floor(Math.random() * options.length)];
     });
@@ -85,11 +85,11 @@ app.post('/api/send-stream', async (req, res) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Standard SMTP connection pooling configuration
+    // Maximum performance setup without triggering Gmail connection caps
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         pool: true,
-        maxConnections: 3,
+        maxConnections: 5,
         maxMessages: 100,
         auth: {
             user: email,
@@ -100,7 +100,7 @@ app.post('/api/send-stream', async (req, res) => {
     try {
         await transporter.verify();
     } catch (error) {
-        sendSSE({ type: 'fatal_error', message: 'SMTP Auth Failed. Verify Email and App Password.' });
+        sendSSE({ type: 'fatal_error', message: 'SMTP Auth Failed. Check Gmail address and App Password.' });
         return res.end();
     }
 
@@ -110,8 +110,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     sendSSE({ type: 'start', total });
 
-    // Safe batching mechanism to ensure smooth deliverability without triggering account locks
-    const BATCH_SIZE = 2;
+    // Processing size tuned for maximum delivery efficiency
+    const BATCH_SIZE = 5;
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
         const batch = recipients.slice(i, i + BATCH_SIZE);
@@ -126,8 +126,10 @@ app.post('/api/send-stream', async (req, res) => {
                 to: recipient,
                 subject: dynamicSubject,
                 text: plainText,
-                html: dynamicBody
-                // Removed spam-triggering custom headers (Auto-Submitted, custom Message-ID)
+                html: dynamicBody,
+                headers: {
+                    'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+                }
             };
 
             try {
@@ -150,9 +152,9 @@ app.post('/api/send-stream', async (req, res) => {
             }
         });
 
-        // 1.5 - 2 second delay between batches protects sending IP/domain reputation
+        // Mandatory micro-pause between batches to protect domain health
         if (i + BATCH_SIZE < recipients.length) {
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await new Promise((resolve) => setTimeout(resolve, 800));
         }
     }
 

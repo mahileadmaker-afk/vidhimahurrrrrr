@@ -85,7 +85,6 @@ app.post('/api/send-stream', async (req, res) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Maximum performance setup without triggering Gmail connection caps
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         pool: true,
@@ -110,7 +109,6 @@ app.post('/api/send-stream', async (req, res) => {
 
     sendSSE({ type: 'start', total });
 
-    // Processing size tuned for maximum delivery efficiency
     const BATCH_SIZE = 5;
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -152,7 +150,6 @@ app.post('/api/send-stream', async (req, res) => {
             }
         });
 
-        // Mandatory micro-pause between batches to protect domain health
         if (i + BATCH_SIZE < recipients.length) {
             await new Promise((resolve) => setTimeout(resolve, 800));
         }

@@ -6,7 +6,7 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 const GATE_PASSWORD = process.env.GATE_PASSWORD || 'admin123';
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || '';
 
+// Login Rate Limiter (Brute-force protection)
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -28,6 +29,7 @@ app.post('/api/auth', loginLimiter, (req, res) => {
     return res.status(401).json({ success: false, message: 'Incorrect password' });
 });
 
+// Advanced Spintax Resolver {opt1|opt2|opt3}
 function parseSpintax(text) {
     if (!text) return '';
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
@@ -36,16 +38,21 @@ function parseSpintax(text) {
     });
 }
 
+// Robust HTML to Plain Text Mirror (Reduces Spam Flagging)
 function cleanPlainText(html) {
     if (!html) return '';
     return html
         .replace(/<style([\s\S]*?)<\/style>/gi, '')
         .replace(/<script([\s\S]*?)<\/script>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
         .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n\s*\n/g, '\n\n')
         .trim();
 }
 
+// Cloudflare Turnstile Verification
 async function verifyTurnstile(token) {
     if (!TURNSTILE_SECRET || TURNSTILE_SECRET.startsWith('1x00000000')) return true;
     try {
@@ -64,8 +71,9 @@ async function verifyTurnstile(token) {
 app.post('/api/send-stream', async (req, res) => {
     const { senderName, email, appPassword, subject, body, recipients, cfToken, authToken } = req.body;
 
+    // Security Authorization Validation
     if (authToken !== Buffer.from(GATE_PASSWORD).toString('base64')) {
-        return res.status(401).json({ error: 'Unauthorized' });
+        return res.status(401).json({ error: 'Unauthorized request' });
     }
 
     const isHuman = await verifyTurnstile(cfToken);
@@ -74,9 +82,10 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (!email || !appPassword || !recipients || !Array.isArray(recipients) || recipients.length === 0) {
-        return res.status(400).json({ error: 'Missing parameters' });
+        return res.status(400).json({ error: 'Missing required mail parameters' });
     }
 
+    // Set Server-Sent Events Headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -85,11 +94,12 @@ app.post('/api/send-stream', async (req, res) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Fast Connection Pool for Maximum Throughput
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
+        maxConnections: 5,  // Maximum allowable simultaneous connections for standard Gmail
+        maxMessages: 200,   // Messages per connection before recycling
         auth: {
             user: email,
             pass: appPassword.replace(/\s+/g, '')
@@ -99,7 +109,7 @@ app.post('/api/send-stream', async (req, res) => {
     try {
         await transporter.verify();
     } catch (error) {
-        sendSSE({ type: 'fatal_error', message: 'SMTP Auth Failed. Check Gmail address and App Password.' });
+        sendSSE({ type: 'fatal_error', message: 'SMTP Auth Failed. Verify Gmail ID & App Password.' });
         return res.end();
     }
 
@@ -109,6 +119,7 @@ app.post('/api/send-stream', async (req, res) => {
 
     sendSSE({ type: 'start', total });
 
+    // High performance batch size: 5 parallel workers
     const BATCH_SIZE = 5;
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -125,8 +136,9 @@ app.post('/api/send-stream', async (req, res) => {
                 subject: dynamicSubject,
                 text: plainText,
                 html: dynamicBody,
+                // Removed spam-flagged custom headers (Auto-Submitted, X-Priority)
                 headers: {
-                    'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+                    'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
                 }
             };
 
@@ -150,8 +162,9 @@ app.post('/api/send-stream', async (req, res) => {
             }
         });
 
+        // Smart micro-pause to prevent Gmail IP rate limiting bans
         if (i + BATCH_SIZE < recipients.length) {
-            await new Promise((resolve) => setTimeout(resolve, 800));
+            await new Promise((resolve) => setTimeout(resolve, 400));
         }
     }
 

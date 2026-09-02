@@ -15,7 +15,6 @@ const PORT = process.env.PORT || 3000;
 const GATE_PASSWORD = process.env.GATE_PASSWORD || 'admin123';
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || '';
 
-// Secure Token Helper using native Crypto
 function generateToken(secret) {
     return crypto.createHash('sha256').update(secret).digest('hex');
 }
@@ -34,7 +33,6 @@ app.post('/api/auth', loginLimiter, (req, res) => {
     return res.status(401).json({ success: false, message: 'Incorrect password' });
 });
 
-// Advanced Spintax Resolver {opt1|opt2|opt3}
 function parseSpintax(text) {
     if (!text) return '';
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
@@ -43,7 +41,6 @@ function parseSpintax(text) {
     });
 }
 
-// Modern HTML-to-Plain Text Mirror (Prevents Spam Filter Flags)
 function cleanPlainText(html) {
     if (!html) return '';
     return html
@@ -73,7 +70,7 @@ async function verifyTurnstile(token) {
 }
 
 app.post('/api/send-stream', async (req, res) => {
-    const { senderName, email, appPassword, subject, body, recipients, cfToken, authToken } = req.body;
+    const { senderName, email, appPassword, subject, body, recipients, cfToken, authToken, unsubscribeUrl } = req.body;
 
     const expectedToken = generateToken(GATE_PASSWORD);
     if (!authToken || authToken !== expectedToken) {
@@ -89,7 +86,6 @@ app.post('/api/send-stream', async (req, res) => {
         return res.status(400).json({ error: 'Missing required mail parameters' });
     }
 
-    // SSE Header Setup
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -98,7 +94,6 @@ app.post('/api/send-stream', async (req, res) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Optimized Transporter Pool for Stable Velocity
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         pool: true,
@@ -133,13 +128,19 @@ app.post('/api/send-stream', async (req, res) => {
             const dynamicBody = parseSpintax(body);
             const plainText = cleanPlainText(dynamicBody);
 
+            const mailHeaders = {};
+            if (unsubscribeUrl) {
+                mailHeaders['List-Unsubscribe'] = `<${unsubscribeUrl}>`;
+                mailHeaders['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+            }
+
             const mailOptions = {
                 from: `"${senderName}" <${email}>`,
                 to: recipient,
                 subject: dynamicSubject,
                 text: plainText,
-                html: dynamicBody
-                // Direct natural headers (No custom suspicious tags)
+                html: dynamicBody,
+                headers: mailHeaders
             };
 
             try {
@@ -162,7 +163,6 @@ app.post('/api/send-stream', async (req, res) => {
             }
         });
 
-        // Smart micro-pause (Gmail rate-limit protection)
         if (i + BATCH_SIZE < recipients.length) {
             await new Promise((resolve) => setTimeout(resolve, 500));
         }

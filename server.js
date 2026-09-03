@@ -124,8 +124,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     sendSSE({ type: 'start', total });
 
-    // Reduced batch size to 2 to minimize parallel spam alerts
-    const BATCH_SIZE = 2;
+    // Reduced batch size to 5 to minimize parallel spam alerts
+    const BATCH_SIZE = 5;
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
         const batch = recipients.slice(i, i + BATCH_SIZE);

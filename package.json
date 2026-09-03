@@ -1,16 +1,32 @@
 {
-  "name": "secure-mail-console",
+  "name": "email-sender-app",
   "version": "1.0.0",
-  "description": "Secure Mail Console with Batch Sending & Primary Inbox Deliverability",
+  "description": "SSE-based Node.js Bulk Email Sender with Spintax and Anti-Spam Protections",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
+  "keywords": [
+    "express",
+    "nodemailer",
+    "sse",
+    "email-sender",
+    "spintax"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.2.0",
     "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -54,6 +54,11 @@ function cleanPlainText(html) {
         .trim();
 }
 
+// Random delay function to mimic human behavior
+function getRandomDelay(minMs = 1500, maxMs = 3500) {
+    return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+}
+
 async function verifyTurnstile(token) {
     if (!TURNSTILE_SECRET || TURNSTILE_SECRET.startsWith('1x00000000')) return true;
     try {
@@ -94,11 +99,12 @@ app.post('/api/send-stream', async (req, res) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Nodemailer transporter configuration
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
+        maxConnections: 1, // Reduced to avoid IP/Account flagging
+        maxMessages: 50,
         auth: {
             user: email,
             pass: appPassword.replace(/\s+/g, '')
@@ -118,7 +124,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     sendSSE({ type: 'start', total });
 
-    const BATCH_SIZE = 5;
+    // Reduced batch size to 2 to minimize parallel spam alerts
+    const BATCH_SIZE = 2;
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
         const batch = recipients.slice(i, i + BATCH_SIZE);
@@ -127,8 +134,14 @@ app.post('/api/send-stream', async (req, res) => {
             const dynamicSubject = parseSpintax(subject);
             const dynamicBody = parseSpintax(body);
             const plainText = cleanPlainText(dynamicBody);
+            const domain = email.split('@')[1] || 'gmail.com';
 
-            const mailHeaders = {};
+            // Essential headers for anti-spam scoring
+            const mailHeaders = {
+                'X-Mailer': 'NodeMailer-App',
+                'X-Report-Abuse-To': email
+            };
+
             if (unsubscribeUrl) {
                 mailHeaders['List-Unsubscribe'] = `<${unsubscribeUrl}>`;
                 mailHeaders['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
@@ -140,7 +153,9 @@ app.post('/api/send-stream', async (req, res) => {
                 subject: dynamicSubject,
                 text: plainText,
                 html: dynamicBody,
-                headers: mailHeaders
+                headers: mailHeaders,
+                messageId: `<${crypto.randomBytes(16).toString('hex')}@${domain}>`,
+                date: new Date()
             };
 
             try {
@@ -163,8 +178,10 @@ app.post('/api/send-stream', async (req, res) => {
             }
         });
 
+        // Human-like delay between batches (1.5 to 3.5 seconds)
         if (i + BATCH_SIZE < recipients.length) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            const delay = getRandomDelay(1500, 3500);
+            await new Promise((resolve) => setTimeout(resolve, delay));
         }
     }
 

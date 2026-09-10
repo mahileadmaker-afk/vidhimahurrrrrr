@@ -1,335 +1,380 @@
-<!DOCTYPE html>
-
-<html lang="en">
-
-
-
-<head>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Secure Mail Console</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <link rel="stylesheet" href="style.css">
-
-</head>
-
-
-
-<body>
-
-    <!-- Password Gate Overlay -->
-
-    <div id="password-gate" class="password-gate">
-
-        <div class="gate-card fade-in">
-
-            <div class="gate-icon">
-
-                <i class="fa-solid fa-lock"></i>
-
-            </div>
-
-            <h2>Access Protected</h2>
-
-            <p>Enter the password to continue</p>
-
-            <form id="gate-form" autocomplete="off">
-
-                <div class="form-group">
-
-                    <div class="password-wrapper">
-
-                        <input type="password" id="gate-password" placeholder="Enter password..." autocomplete="current-password" required>
-
-                        <button type="button" id="toggle-gate-password" class="icon-button" aria-label="Toggle password visibility">
-
-                            <i class="fa-regular fa-eye"></i>
-
-                        </button>
-
-                    </div>
-
-                </div>
-
-                <div id="gate-error" class="gate-error hidden">
-
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-
-                    <span>Incorrect password</span>
-
-                </div>
-
-                <button type="submit" id="gate-submit-btn" class="btn btn-primary btn-block">
-
-                    <i class="fa-solid fa-arrow-right-to-bracket"></i> Enter
-
-                </button>
-
-            </form>
-
-        </div>
-
-    </div>
-
-
-
-    <!-- Main Dashboard Application -->
-
-    <div class="app-container hidden" id="main-app">
-
-        <header class="app-header">
-
-            <h1><i class="fa-solid fa-shield-halved"></i> Secure Mail Console</h1>
-
-            <button type="button" id="logout-btn" class="btn-logout" title="Double click to logout">
-
-                <i class="fa-solid fa-right-from-bracket"></i> Logout (Double Click)
-
-            </button>
-
-        </header>
-
-
-
-        <section id="dashboard-section">
-
-            <div class="dashboard-header fade-in">
-
-                <h2><i class="fa-solid fa-paper-plane"></i> Bulk Email Sender</h2>
-
-            </div>
-
-
-
-            <div class="dashboard-grid">
-
-                <!-- Composer Card -->
-
-                <div class="card composer-card fade-in delay-1">
-
-                    <h3><i class="fa-solid fa-pen-to-square"></i> Compose Message</h3>
-
-                    <form id="compose-form" onsubmit="return false;">
-
-                        
-
-                        <div class="form-row">
-
-                            <div class="form-group half">
-
-                                <label for="sender-name">Sender Name</label>
-
-                                <input type="text" id="sender-name" placeholder="E.g., John Doe" required spellcheck="false">
-
-                            </div>
-
-                            <div class="form-group half">
-
-                                <label for="dashboard-email">Your Gmail</label>
-
-                                <input type="email" id="dashboard-email" placeholder="you@gmail.com" required spellcheck="false" autocomplete="email">
-
-                            </div>
-
-                        </div>
-
-
-
-                        <div class="form-row">
-
-                            <div class="form-group half">
-
-                                <label for="dashboard-password">App Password</label>
-
-                                <div class="password-wrapper">
-
-                                    <input type="password" id="dashboard-password" placeholder="16-char app password" required autocomplete="off">
-
-                                    <button type="button" id="toggle-password" class="icon-button" aria-label="Toggle App Password">
-
-                                        <i class="fa-regular fa-eye"></i>
-
-                                    </button>
-
-                                </div>
-
-                            </div>
-
-                            <div class="form-group half">
-
-                                <label for="subject">Email Subject</label>
-
-                                <input type="text" id="subject" placeholder="Enter subject line..." required>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <div class="form-group flex-grow">
-
-                            <label for="message-body">Message Body (Plain Text / HTML)</label>
-
-                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}" required></textarea>
-
-                        </div>
-
-                        
-
-                        <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
-
-                            <label><i class="fa-solid fa-shield-cat"></i> Spam Protection</label>
-
-                            <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-theme="light"></div>
-
-                        </div>
-
-                    </form>
-
-                </div>
-
-
-
-                <!-- Recipients & Controls -->
-
-                <div class="right-column">
-
-                    <div class="card recipients-card fade-in delay-2">
-
-                        <div class="card-header-flex">
-
-                            <h3><i class="fa-solid fa-users"></i> Recipients</h3>
-
-                            <span class="badge" id="detected-count">0 found</span>
-
-                        </div>
-
-                        <p class="help-subtext">Paste emails (comma separated, new lines, or Excel copy)</p>
-
-                        <div class="form-group flex-grow" style="margin-bottom: 0;">
-
-                            <textarea id="recipients-input" placeholder="recipient1@example.com&#10;recipient2@example.com" spellcheck="false"></textarea>
-
-                        </div>
-
-                        <div id="email-validation-error" class="error-message hidden">
-
-                            <i class="fa-solid fa-triangle-exclamation"></i> <span>Please enter valid recipients.</span>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="card progress-card fade-in delay-3">
-
-                        <h3><i class="fa-solid fa-chart-pie"></i> Progress Monitor</h3>
-
-
-
-                        <div class="stats-grid">
-
-                            <div class="stat-box neutral">
-
-                                <span class="stat-label">Total</span>
-
-                                <span class="stat-value" id="stat-total">0</span>
-
-                            </div>
-
-                            <div class="stat-box success">
-
-                                <span class="stat-label">Sent</span>
-
-                                <span class="stat-value" id="stat-sent">0</span>
-
-                            </div>
-
-                            <div class="stat-box danger">
-
-                                <span class="stat-label">Failed</span>
-
-                                <span class="stat-value" id="stat-failed">0</span>
-
-                            </div>
-
-                            <div class="stat-box warning">
-
-                                <span class="stat-label">Remaining</span>
-
-                                <span class="stat-value" id="stat-remaining">0</span>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <div class="progress-bar-container">
-
-                            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
-
-                        </div>
-
-
-
-                        <div class="status-indicator">
-
-                            <i id="status-icon" class="fa-solid fa-circle-pause text-muted"></i>
-
-                            <span id="status-text">Ready to send</span>
-
-                        </div>
-
-
-
-                        <div class="control-buttons">
-
-                            <button type="button" id="send-btn" class="btn btn-success btn-lg flex-1">
-
-                                <i class="fa-solid fa-paper-plane"></i> Send All
-
-                            </button>
-
-                            <button type="button" id="stop-btn" class="btn btn-danger btn-lg flex-1 hidden">
-
-                                <i class="fa-solid fa-stop"></i> Stop Sending
-
-                            </button>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </section>
-
-    </div>
-
-
-
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-
-    <script src="script.js"></script>
-
-</body>
-
-
-
-</html>
+import 'dotenv/config';
+import express from 'express';
+import nodemailer from 'nodemailer';
+import cors from 'cors';
+import path from 'path';
+import crypto from 'crypto';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
+
+const globalSession = { stopRequested: false };
+const poolMap = new Map();
+
+// Dynamic Helper Delays
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Express Setup
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+/* ==========================================================================
+   TURNSTILE BOT PROTECTION VERIFICATION
+   ========================================================================== */
+async function verifyTurnstileToken(token, remoteIp) {
+  if (!token || TURNSTILE_SECRET_KEY.startsWith('1x0000000000000000000000000000000AA')) {
+    return true;
+  }
+
+  try {
+    const formData = new URLSearchParams();
+    formData.append('secret', TURNSTILE_SECRET_KEY);
+    formData.append('response', token);
+    if (remoteIp) formData.append('remoteip', remoteIp);
+
+    const result = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' }
+    });
+    const outcome = await result.json();
+    return outcome.success === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/* ==========================================================================
+   GMAIL TLS TRANSPORTER POOL (Optimized TLS & Connections)
+   ========================================================================== */
+function getPort587Transporter(email, appPassword) {
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanPass = appPassword.replace(/\s+/g, '').trim();
+  const key = `port587_${cleanEmail}_${cleanPass}`;
+
+  if (poolMap.size > 100) {
+    poolMap.clear();
+  }
+
+  if (!poolMap.has(key)) {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // STARTTLS
+      requireTLS: true,
+      auth: {
+        user: cleanEmail,
+        pass: cleanPass
+      },
+      pool: true,
+      maxConnections: 6,
+      maxMessages: 100,
+      socketTimeout: 30000,
+      connectionTimeout: 30000,
+      tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+      }
+    });
+    poolMap.set(key, transporter);
+  }
+  return poolMap.get(key);
+}
+
+/* ==========================================================================
+   RECIPIENT & SPINTAX HELPERS WITH INVISIBLE SPAM-BYPASS HASH
+   ========================================================================== */
+function parseRecipientData(input) {
+  let email = '';
+  let rawName = '';
+
+  if (typeof input === 'object' && input !== null) {
+    email = (input.email || input.recipient || '').trim();
+    rawName = (input.name || input.fullName || input.first_name || '').trim();
+  } else if (typeof input === 'string') {
+    const str = input.trim();
+    const angleMatch = str.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
+    if (angleMatch) {
+      rawName = angleMatch[1] ? angleMatch[1].trim() : '';
+      email = angleMatch[2].trim();
+    } else if (str.includes(',')) {
+      const parts = str.split(',');
+      if (parts[0].includes('@')) {
+        email = parts[0].trim();
+        rawName = parts[1].trim();
+      } else {
+        rawName = parts[0].trim();
+        email = parts[1].trim();
+      }
+    } else {
+      email = str;
+    }
+  }
+
+  if (!rawName && email.includes('@')) {
+    const prefix = email.split('@')[0];
+    rawName = prefix.replace(/[0-9_.-]/g, ' ').trim();
+  }
+
+  const formattedName = rawName
+    ? rawName.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+    : '';
+
+  const firstName = formattedName ? formattedName.split(' ')[0] : '';
+  const domain = email.includes('@') ? email.split('@')[1] : '';
+
+  return {
+    email: email.toLowerCase(),
+    name: formattedName,
+    firstName: firstName,
+    domain: domain
+  };
+}
+
+function parseSpintax(text) {
+  if (!text) return '';
+  let spun = String(text);
+  const regex = /\{([^{}]+)\}/s;
+  let iterations = 0;
+
+  while (regex.test(spun) && iterations < 30) {
+    spun = spun.replace(regex, (_, choices) => {
+      if (!choices.includes('|')) return choices;
+      const options = choices.split('|');
+      const pick = options[Math.floor(Math.random() * options.length)];
+      return pick ? pick.trim() : '';
+    });
+    iterations++;
+  }
+  return spun.replace(/[\{\}]/g, '').trim();
+}
+
+// Zero-width space generator: Unseen by users, but changes body cryptographic fingerprint for Spam Bypassing
+function getInvisibleHash() {
+  const zeroWidthChars = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+  let hash = '';
+  for (let i = 0; i < 6; i++) {
+    hash += zeroWidthChars[Math.floor(Math.random() * zeroWidthChars.length)];
+  }
+  return hash;
+}
+
+function personalizeContent(template, recipient) {
+  if (!template) return '';
+  let content = parseSpintax(template);
+
+  const displayName = recipient.name || recipient.firstName || '';
+  const displayFirstName = recipient.firstName || displayName || '';
+
+  content = content.replace(/{Name}/gi, displayName ? displayName : 'there');
+  content = content.replace(/{FirstName}/gi, displayFirstName ? displayFirstName : 'there');
+  content = content.replace(/{First_Name}/gi, displayFirstName ? displayFirstName : 'there');
+  content = content.replace(/{Email}/gi, recipient.email);
+  content = content.replace(/{Domain}/gi, recipient.domain);
+
+  return content;
+}
+
+function createPlainTextFromHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
+}
+
+/* ==========================================================================
+   API ROUTES
+   ========================================================================== */
+app.get('/', (req, res) => {
+  const filePath1 = path.join(process.cwd(), 'public', 'index.html');
+  const filePath2 = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(filePath1)) return res.sendFile(filePath1);
+  if (fs.existsSync(filePath2)) return res.sendFile(filePath2);
+  return res.status(200).send('<h1>Server Running Safely</h1>');
+});
+
+app.post('/api/auth', (req, res) => {
+  const { password } = req.body;
+  if (password === SITE_PASSWORD) return res.json({ success: true, message: 'Authorized' });
+  return res.status(401).json({ success: false, message: 'Unauthorized Password' });
+});
+
+app.post('/api/verify', async (req, res) => {
+  const { email, appPassword, cfToken } = req.body;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  if (!email || !appPassword) {
+    return res.status(400).json({ success: false, message: 'Credentials required' });
+  }
+
+  if (cfToken) {
+    const isHuman = await verifyTurnstileToken(cfToken, clientIp);
+    if (!isHuman) {
+      return res.status(403).json({ success: false, message: 'Security Verification Failed' });
+    }
+  }
+
+  try {
+    const transporter = getPort587Transporter(email, appPassword);
+    await transporter.verify();
+    return res.json({ success: true, message: 'SMTP verified successfully' });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
+    });
+  }
+});
+
+/* ==========================================================================
+   INBOX-OPTIMIZED DISPATCH ROUTE (Batch 6 + Micro-Staggering)
+   ========================================================================== */
+app.post('/api/send-stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const { email, appPassword, senderName, subject, messageBody, recipients, cfToken } = req.body;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  if (!email || !appPassword || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (cfToken) {
+    const isHuman = await verifyTurnstileToken(cfToken, clientIp);
+    if (!isHuman) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Turnstile Verification Failed' })}\n\n`);
+      res.end();
+      return;
+    }
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
+  globalSession.stopRequested = false;
+
+  const keepAlivePing = setInterval(() => {
+    res.write(': keep-alive\n\n');
+  }, 4000);
+
+  const transporter = getPort587Transporter(email, appPassword);
+  const BATCH_SIZE = 6;
+
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+    if (globalSession.stopRequested) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
+      break;
+    }
+
+    const currentBatch = recipients.slice(i, i + BATCH_SIZE);
+
+    // Micro-staggering inside the batch to avoid simultaneous TLS handshake flags
+    const sendPromises = currentBatch.map(async (rawRecipient, index) => {
+      await delay(index * 150); // 150ms delay per thread in batch
+      
+      const recipient = parseRecipientData(rawRecipient);
+
+      if (!recipient.email) {
+        return { success: false, recipient: '', error: 'Invalid Email' };
+      }
+
+      try {
+        const personalizedSubject = personalizeContent(subject, recipient);
+        const personalizedBody = personalizeContent(messageBody, recipient);
+        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
+
+        const invisibleSalt = getInvisibleHash();
+        const innerContent = isHtml 
+          ? personalizedBody 
+          : personalizedBody.replace(/\n/g, '<br>');
+
+        // Natural HTML block without marketing wrapper signatures
+        const formattedHtml = `${innerContent}${invisibleSalt}`;
+        const plainTextFormatted = createPlainTextFromHtml(personalizedBody) + invisibleSalt;
+
+        // Clean natural email payload
+        const mailOptions = {
+          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
+          subject: (personalizedSubject || 'Update') + invisibleSalt,
+          html: formattedHtml,
+          text: plainTextFormatted
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        return { 
+          success: true, 
+          recipient: recipient.email, 
+          name: recipient.name, 
+          ref: info.messageId || 'SENT' 
+        };
+
+      } catch (err) {
+        return { success: false, recipient: recipient.email, error: err.message };
+      }
+    });
+
+    const batchResults = await Promise.allSettled(sendPromises);
+
+    for (const resItem of batchResults) {
+      if (resItem.status === 'fulfilled') {
+        res.write(`data: ${JSON.stringify(resItem.value)}\n\n`);
+      }
+    }
+
+    // 1 to 2 seconds randomized delay between 6-mail batches
+    if (i + BATCH_SIZE < recipients.length) {
+      const batchDelay = Math.floor(Math.random() * 1000) + 1000;
+      await delay(batchDelay);
+    }
+  }
+
+  clearInterval(keepAlivePing);
+  res.write('data: [DONE]\n\n');
+  res.end();
+});
+
+app.post('/api/stop', (req, res) => {
+  globalSession.stopRequested = true;
+  res.json({ success: true, message: 'Sending process stopped' });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Mailer server running safely on port ${PORT}`);
+  });
+}
+
+export default app;

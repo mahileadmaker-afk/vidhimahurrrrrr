@@ -1,177 +1,335 @@
-const express = require('express');
-const nodemailer = require('nodemailer');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const path = require('path');
-const crypto = require('crypto');
-require('dotenv').config();
+<!DOCTYPE html>
 
-const app = express();
-app.use(express.json({ limit: '10mb' }));
-app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
+<html lang="en">
 
-const PORT = process.env.PORT || 3000;
-const GATE_PASSWORD = process.env.GATE_PASSWORD || 'admin123';
-const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || '';
 
-function generateToken(secret) {
-    return crypto.createHash('sha256').update(secret).digest('hex');
-}
 
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    message: { success: false, message: 'Too many login attempts. Try again later.' }
-});
+<head>
 
-app.post('/api/auth', loginLimiter, (req, res) => {
-    const { password } = req.body;
-    if (password === GATE_PASSWORD) {
-        return res.json({ success: true, token: generateToken(GATE_PASSWORD) });
-    }
-    return res.status(401).json({ success: false, message: 'Incorrect password' });
-});
+    <meta charset="UTF-8">
 
-function parseSpintax(text) {
-    if (!text) return '';
-    return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
-        const options = choices.split('|');
-        return options[Math.floor(Math.random() * options.length)];
-    });
-}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-function cleanPlainText(html) {
-    if (!html) return '';
-    return html
-        .replace(/<style([\s\S]*?)<\/style>/gi, '')
-        .replace(/<script([\s\S]*?)<\/script>/gi, '')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/[ \t]+/g, ' ')
-        .replace(/\n\s*\n/g, '\n\n')
-        .trim();
-}
+    <title>Secure Mail Console</title>
 
-async function verifyTurnstile(token) {
-    if (!TURNSTILE_SECRET || TURNSTILE_SECRET.startsWith('1x00000000')) return true;
-    try {
-        const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${encodeURIComponent(TURNSTILE_SECRET)}&response=${encodeURIComponent(token)}`
-        });
-        const data = await response.json();
-        return data.success;
-    } catch (e) {
-        return false;
-    }
-}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
 
-app.post('/api/send-stream', async (req, res) => {
-    const { senderName, email, appPassword, subject, body, recipients, cfToken, authToken, unsubscribeUrl } = req.body;
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    const expectedToken = generateToken(GATE_PASSWORD);
-    if (!authToken || authToken !== expectedToken) {
-        return res.status(401).json({ error: 'Unauthorized access' });
-    }
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    const isHuman = await verifyTurnstile(cfToken);
-    if (!isHuman) {
-        return res.status(400).json({ error: 'Captcha validation failed' });
-    }
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    if (!email || !appPassword || !recipients || !Array.isArray(recipients) || recipients.length === 0) {
-        return res.status(400).json({ error: 'Missing required mail parameters' });
-    }
+    <link rel="stylesheet" href="style.css">
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+</head>
 
-    const sendSSE = (data) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
 
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
-        auth: {
-            user: email,
-            pass: appPassword.replace(/\s+/g, '')
-        }
-    });
 
-    try {
-        await transporter.verify();
-    } catch (error) {
-        sendSSE({ type: 'fatal_error', message: 'SMTP Auth Failed. Verify Email & App Password.' });
-        return res.end();
-    }
+<body>
 
-    const total = recipients.length;
-    let sentCount = 0;
-    let failedCount = 0;
+    <!-- Password Gate Overlay -->
 
-    sendSSE({ type: 'start', total });
+    <div id="password-gate" class="password-gate">
 
-    const BATCH_SIZE = 5;
+        <div class="gate-card fade-in">
 
-    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-        const batch = recipients.slice(i, i + BATCH_SIZE);
+            <div class="gate-icon">
 
-        const batchPromises = batch.map(async (recipient) => {
-            const dynamicSubject = parseSpintax(subject);
-            const dynamicBody = parseSpintax(body);
-            const plainText = cleanPlainText(dynamicBody);
+                <i class="fa-solid fa-lock"></i>
 
-            const mailHeaders = {};
-            const unsubLink = unsubscribeUrl || `mailto:${email}?subject=Unsubscribe`;
-            mailHeaders['List-Unsubscribe'] = `<${unsubLink}>`;
-            mailHeaders['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+            </div>
 
-            const mailOptions = {
-                from: `"${senderName}" <${email}>`,
-                to: recipient,
-                subject: dynamicSubject,
-                text: plainText,
-                html: dynamicBody,
-                headers: mailHeaders
-            };
+            <h2>Access Protected</h2>
 
-            try {
-                await transporter.sendMail(mailOptions);
-                return { recipient, success: true };
-            } catch (err) {
-                return { recipient, success: false, error: err.message };
-            }
-        });
+            <p>Enter the password to continue</p>
 
-        const results = await Promise.all(batchPromises);
+            <form id="gate-form" autocomplete="off">
 
-        results.forEach((resResult) => {
-            if (resResult.success) {
-                sentCount++;
-                sendSSE({ type: 'progress', status: 'sent', recipient: resResult.recipient, sentCount, failedCount });
-            } else {
-                failedCount++;
-                sendSSE({ type: 'progress', status: 'failed', recipient: resResult.recipient, error: resResult.error, sentCount, failedCount });
-            }
-        });
+                <div class="form-group">
 
-        if (i + BATCH_SIZE < recipients.length) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-        }
-    }
+                    <div class="password-wrapper">
 
-    transporter.close();
-    sendSSE({ type: 'complete', sentCount, failedCount, total });
-    res.end();
-});
+                        <input type="password" id="gate-password" placeholder="Enter password..." autocomplete="current-password" required>
 
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-});
+                        <button type="button" id="toggle-gate-password" class="icon-button" aria-label="Toggle password visibility">
+
+                            <i class="fa-regular fa-eye"></i>
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+                <div id="gate-error" class="gate-error hidden">
+
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+
+                    <span>Incorrect password</span>
+
+                </div>
+
+                <button type="submit" id="gate-submit-btn" class="btn btn-primary btn-block">
+
+                    <i class="fa-solid fa-arrow-right-to-bracket"></i> Enter
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- Main Dashboard Application -->
+
+    <div class="app-container hidden" id="main-app">
+
+        <header class="app-header">
+
+            <h1><i class="fa-solid fa-shield-halved"></i> Secure Mail Console</h1>
+
+            <button type="button" id="logout-btn" class="btn-logout" title="Double click to logout">
+
+                <i class="fa-solid fa-right-from-bracket"></i> Logout (Double Click)
+
+            </button>
+
+        </header>
+
+
+
+        <section id="dashboard-section">
+
+            <div class="dashboard-header fade-in">
+
+                <h2><i class="fa-solid fa-paper-plane"></i> Bulk Email Sender</h2>
+
+            </div>
+
+
+
+            <div class="dashboard-grid">
+
+                <!-- Composer Card -->
+
+                <div class="card composer-card fade-in delay-1">
+
+                    <h3><i class="fa-solid fa-pen-to-square"></i> Compose Message</h3>
+
+                    <form id="compose-form" onsubmit="return false;">
+
+                        
+
+                        <div class="form-row">
+
+                            <div class="form-group half">
+
+                                <label for="sender-name">Sender Name</label>
+
+                                <input type="text" id="sender-name" placeholder="E.g., John Doe" required spellcheck="false">
+
+                            </div>
+
+                            <div class="form-group half">
+
+                                <label for="dashboard-email">Your Gmail</label>
+
+                                <input type="email" id="dashboard-email" placeholder="you@gmail.com" required spellcheck="false" autocomplete="email">
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="form-row">
+
+                            <div class="form-group half">
+
+                                <label for="dashboard-password">App Password</label>
+
+                                <div class="password-wrapper">
+
+                                    <input type="password" id="dashboard-password" placeholder="16-char app password" required autocomplete="off">
+
+                                    <button type="button" id="toggle-password" class="icon-button" aria-label="Toggle App Password">
+
+                                        <i class="fa-regular fa-eye"></i>
+
+                                    </button>
+
+                                </div>
+
+                            </div>
+
+                            <div class="form-group half">
+
+                                <label for="subject">Email Subject</label>
+
+                                <input type="text" id="subject" placeholder="Enter subject line..." required>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="form-group flex-grow">
+
+                            <label for="message-body">Message Body (Plain Text / HTML)</label>
+
+                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}" required></textarea>
+
+                        </div>
+
+                        
+
+                        <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
+
+                            <label><i class="fa-solid fa-shield-cat"></i> Spam Protection</label>
+
+                            <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-theme="light"></div>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+
+
+                <!-- Recipients & Controls -->
+
+                <div class="right-column">
+
+                    <div class="card recipients-card fade-in delay-2">
+
+                        <div class="card-header-flex">
+
+                            <h3><i class="fa-solid fa-users"></i> Recipients</h3>
+
+                            <span class="badge" id="detected-count">0 found</span>
+
+                        </div>
+
+                        <p class="help-subtext">Paste emails (comma separated, new lines, or Excel copy)</p>
+
+                        <div class="form-group flex-grow" style="margin-bottom: 0;">
+
+                            <textarea id="recipients-input" placeholder="recipient1@example.com&#10;recipient2@example.com" spellcheck="false"></textarea>
+
+                        </div>
+
+                        <div id="email-validation-error" class="error-message hidden">
+
+                            <i class="fa-solid fa-triangle-exclamation"></i> <span>Please enter valid recipients.</span>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <div class="card progress-card fade-in delay-3">
+
+                        <h3><i class="fa-solid fa-chart-pie"></i> Progress Monitor</h3>
+
+
+
+                        <div class="stats-grid">
+
+                            <div class="stat-box neutral">
+
+                                <span class="stat-label">Total</span>
+
+                                <span class="stat-value" id="stat-total">0</span>
+
+                            </div>
+
+                            <div class="stat-box success">
+
+                                <span class="stat-label">Sent</span>
+
+                                <span class="stat-value" id="stat-sent">0</span>
+
+                            </div>
+
+                            <div class="stat-box danger">
+
+                                <span class="stat-label">Failed</span>
+
+                                <span class="stat-value" id="stat-failed">0</span>
+
+                            </div>
+
+                            <div class="stat-box warning">
+
+                                <span class="stat-label">Remaining</span>
+
+                                <span class="stat-value" id="stat-remaining">0</span>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="progress-bar-container">
+
+                            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+
+                        </div>
+
+
+
+                        <div class="status-indicator">
+
+                            <i id="status-icon" class="fa-solid fa-circle-pause text-muted"></i>
+
+                            <span id="status-text">Ready to send</span>
+
+                        </div>
+
+
+
+                        <div class="control-buttons">
+
+                            <button type="button" id="send-btn" class="btn btn-success btn-lg flex-1">
+
+                                <i class="fa-solid fa-paper-plane"></i> Send All
+
+                            </button>
+
+                            <button type="button" id="stop-btn" class="btn btn-danger btn-lg flex-1 hidden">
+
+                                <i class="fa-solid fa-stop"></i> Stop Sending
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+    <script src="script.js"></script>
+
+</body>
+
+
+
+</html>

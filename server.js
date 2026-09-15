@@ -3,6 +3,8 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,8 +15,7 @@ const PORT = process.env.PORT || 3000;
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
 
-// Per-session stop flags to prevent global state leaks across multiple requests
-const activeSessions = new Map();
+const globalSession = { stopRequested: false };
 const poolMap = new Map();
 
 // Dynamic Helper Delays
@@ -58,13 +59,9 @@ async function verifyTurnstileToken(token, remoteIp) {
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `port587_\({cleanEmail}_\){cleanPass}`;
+  const key = `port587_${cleanEmail}_${cleanPass}`;
 
   if (poolMap.size > 100) {
-    // Gracefully close older transporters before clearing to avoid socket leaks
-    for (const [_, transporter] of poolMap.entries()) {
-      try { transporter.close(); } catch (_) {}
-    }
     poolMap.clear();
   }
 
@@ -161,6 +158,7 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
+// Zero-width space generator: Unseen by users, but changes body cryptographic fingerprint for Spam Bypassing
 function getInvisibleHash() {
   const zeroWidthChars = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
   let hash = '';
@@ -189,16 +187,16 @@ function personalizeContent(template, recipient) {
 function createPlainTextFromHtml(html) {
   if (!html) return '';
   return html
-    .replace(/]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/]*>[\s\S]*?<\/script>/gi, '')
-    .replace(//gi, '\n')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*[\/]?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/ /gi, ' ')
-    .replace(/&/gi, '&')
-    .replace(/</gi, '<')
-    .replace(/>/gi, '>')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
     .replace(/\n\s*\n/g, '\n\n')
     .trim();
 }
@@ -211,4 +209,172 @@ app.get('/', (req, res) => {
   const filePath2 = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(filePath1)) return res.sendFile(filePath1);
   if (fs.existsSync(filePath2)) return res.sendFile(filePath2);
-  return res.status(200).send('
+  return res.status(200).send('<h1>Server Running Safely</h1>');
+});
+
+app.post('/api/auth', (req, res) => {
+  const { password } = req.body;
+  if (password === SITE_PASSWORD) return res.json({ success: true, message: 'Authorized' });
+  return res.status(401).json({ success: false, message: 'Unauthorized Password' });
+});
+
+app.post('/api/verify', async (req, res) => {
+  const { email, appPassword, cfToken } = req.body;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  if (!email || !appPassword) {
+    return res.status(400).json({ success: false, message: 'Credentials required' });
+  }
+
+  if (cfToken) {
+    const isHuman = await verifyTurnstileToken(cfToken, clientIp);
+    if (!isHuman) {
+      return res.status(403).json({ success: false, message: 'Security Verification Failed' });
+    }
+  }
+
+  try {
+    const transporter = getPort587Transporter(email, appPassword);
+    await transporter.verify();
+    return res.json({ success: true, message: 'SMTP verified successfully' });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
+    });
+  }
+});
+
+/* ==========================================================================
+   INBOX-OPTIMIZED DISPATCH ROUTE (Batch 6 + Micro-Staggering)
+   ========================================================================== */
+app.post('/api/send-stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const { email, appPassword, senderName, subject, messageBody, recipients, cfToken } = req.body;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  if (!email || !appPassword || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (cfToken) {
+    const isHuman = await verifyTurnstileToken(cfToken, clientIp);
+    if (!isHuman) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Turnstile Verification Failed' })}\n\n`);
+      res.end();
+      return;
+    }
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
+  globalSession.stopRequested = false;
+
+  const keepAlivePing = setInterval(() => {
+    res.write(': keep-alive\n\n');
+  }, 4000);
+
+  const transporter = getPort587Transporter(email, appPassword);
+  const BATCH_SIZE = 6;
+
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+    if (globalSession.stopRequested) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
+      break;
+    }
+
+    const currentBatch = recipients.slice(i, i + BATCH_SIZE);
+
+    // Micro-staggering inside the batch to avoid simultaneous TLS handshake flags
+    const sendPromises = currentBatch.map(async (rawRecipient, index) => {
+      await delay(index * 150); // 150ms delay per thread in batch
+      
+      const recipient = parseRecipientData(rawRecipient);
+
+      if (!recipient.email) {
+        return { success: false, recipient: '', error: 'Invalid Email' };
+      }
+
+      try {
+        const personalizedSubject = personalizeContent(subject, recipient);
+        const personalizedBody = personalizeContent(messageBody, recipient);
+        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
+
+        const invisibleSalt = getInvisibleHash();
+        const innerContent = isHtml 
+          ? personalizedBody 
+          : personalizedBody.replace(/\n/g, '<br>');
+
+        // Natural HTML block without marketing wrapper signatures
+        const formattedHtml = `${innerContent}${invisibleSalt}`;
+        const plainTextFormatted = createPlainTextFromHtml(personalizedBody) + invisibleSalt;
+
+        // Clean natural email payload
+        const mailOptions = {
+          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
+          subject: (personalizedSubject || 'Update') + invisibleSalt,
+          html: formattedHtml,
+          text: plainTextFormatted
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        return { 
+          success: true, 
+          recipient: recipient.email, 
+          name: recipient.name, 
+          ref: info.messageId || 'SENT' 
+        };
+
+      } catch (err) {
+        return { success: false, recipient: recipient.email, error: err.message };
+      }
+    });
+
+    const batchResults = await Promise.allSettled(sendPromises);
+
+    for (const resItem of batchResults) {
+      if (resItem.status === 'fulfilled') {
+        res.write(`data: ${JSON.stringify(resItem.value)}\n\n`);
+      }
+    }
+
+    // 1 to 2 seconds randomized delay between 6-mail batches
+    if (i + BATCH_SIZE < recipients.length) {
+      const batchDelay = Math.floor(Math.random() * 1000) + 1000;
+      await delay(batchDelay);
+    }
+  }
+
+  clearInterval(keepAlivePing);
+  res.write('data: [DONE]\n\n');
+  res.end();
+});
+
+app.post('/api/stop', (req, res) => {
+  globalSession.stopRequested = true;
+  res.json({ success: true, message: 'Sending process stopped' });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Mailer server running safely on port ${PORT}`);
+  });
+}
+
+export default app;

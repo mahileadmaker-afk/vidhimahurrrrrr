@@ -1,105 +1,799 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Secure Mail Console</title>
-<style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f4f6fb;font-synthesis:none}
-*{box-sizing:border-box}body{margin:0;min-height:100vh}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:22px max(22px,calc((100vw - 1200px)/2));background:#101b35;color:white;gap:16px}
-.topbar h1{margin:3px 0 0;font-size:24px}.eyebrow{font-size:10px;letter-spacing:.16em;font-weight:800;color:#7c8ba9}.topbar .eyebrow{color:#9eadd0}
-.layout{max-width:1200px;margin:26px auto;padding:0 20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}.right-stack{display:grid;gap:22px}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.field-grid label{min-width:0}.right-stack textarea{min-height:132px}
-.panel,.login-card{background:#fff;border:1px solid #e4e8f0;border-radius:18px;padding:24px;box-shadow:0 8px 28px #1a2a4b0b}
-.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}.panel h2{margin:5px 0 0;font-size:21px}
-.pill{font-size:12px;padding:7px 10px;border-radius:999px;background:#eef2ff;color:#3e52a1;font-weight:700}
-label{display:block;font-size:13px;font-weight:700;margin:15px 0;color:#34415a}
-input:not([type=checkbox]),textarea{display:block;width:100%;margin-top:7px;border:1px solid #d8deea;border-radius:10px;padding:12px 13px;font:inherit;font-size:14px;color:#172033;background:#fff;outline:none}
-input:focus,textarea:focus{border-color:#6579d7;box-shadow:0 0 0 3px #6579d71c}textarea{resize:vertical;line-height:1.55}
-.check{display:flex;align-items:flex-start;gap:9px;line-height:1.5}.check input{margin-top:3px}.muted{color:#778198;font-size:12px;font-weight:400}
-.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:750;cursor:pointer}.btn:disabled{opacity:.5;cursor:not-allowed}
-.primary{background:#3457db;color:white}.secondary{background:#edf0f7;color:#293550}.actions{display:flex;gap:10px;margin-top:18px}.actions .btn{flex:1}
-.status,.notice{font-size:13px;line-height:1.5;color:#4b5872;background:#f5f7fc;border-radius:10px;padding:12px}
-.notice,.error{color:#a63d35;background:#fff1ef;padding:12px;border-radius:10px;font-size:13px}.captcha{margin:18px 0}
-.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.stat{background:#f6f8fc;border:1px solid #e9edf5;padding:17px;border-radius:13px}
-.stat span{display:block;text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:#79839a;font-weight:800}.stat strong{display:block;font-size:29px;margin-top:6px}
-.progress-track{height:8px;background:#edf0f6;border-radius:99px;overflow:hidden;margin:18px 0 25px}.progress-bar{height:100%;width:0;background:#3457db;transition:width .15s}
-h3{font-size:15px}.log{height:310px;overflow:auto;border:1px solid #e7ebf3;border-radius:12px;padding:10px;background:#fbfcfe}
-.log p{font-size:12px;line-height:1.5;overflow-wrap:anywhere;border-bottom:1px solid #edf0f5;padding:7px 3px;margin:0}
-.success{color:#16805d}.failure{color:#b53b43}.footnote{font-size:11px;line-height:1.5;color:#778198}
-.login-page{display:grid;place-items:center;padding:20px}.login-card{width:min(420px,100%)}.login-card h1{font-size:25px}.full{width:100%;margin-top:10px}
-@media(max-width:800px){.layout{grid-template-columns:1fr;margin:14px auto}.topbar{padding:18px 20px}.panel{padding:18px}.topbar h1{font-size:20px}}@media(max-width:520px){.field-grid{grid-template-columns:1fr}}
 
-</style>
-</head>
-<body>
-<header class="topbar"><div><div class="eyebrow">MAIL OPERATIONS</div><h1>Secure Mail Console</h1></div><form action="{{ url_for('logout') }}" method="post"><button class="btn secondary">Log out</button></form></header>
-<main class="layout">
-<section class="panel">
-<div class="panel-head"><div><div class="eyebrow">MESSAGE BUILDER</div><h2>Compose email</h2></div><span class="pill">Gmail SMTP</span></div>
-<form id="sendForm">
-<div class="field-grid"><label>Sender Name<input id="senderName" required placeholder="Your name or business"></label>
-<label>Your Gmail<input id="gmail" type="email" required placeholder="you@gmail.com"></label>
-<label>App Password<input id="appPassword" type="password" required autocomplete="new-password"></label>
-<label>Email Subject<input id="subject" required maxlength="250" placeholder="Email subject"></label></div>
-<label>Message body<textarea id="body" rows="9" required placeholder="Write your message. You can use {{name}} and {{email}}."></textarea></label>
-<label class="check"><input id="isHtml" type="checkbox"> Message body is HTML</label>
-<p class="muted">Send only to recipients who agreed to receive your email.</p>
-<div class="actions"><button id="sendBtn" class="btn primary" type="submit">Send All</button><button id="stopBtn" class="btn secondary" type="button" disabled>Stop UI Updates</button></div>
-<p id="status" class="status" role="status">Ready to send.</p>
-</form></section>
-<div class="right-stack">
-<section class="panel"><div class="panel-head"><div><h2>♟ Recipients</h2><p class="muted">Paste email addresses separated by commas or new lines</p></div><span id="recipientCount" class="pill">0 found</span></div>
-<label><textarea id="recipients" rows="6" required form="sendForm" placeholder="person@example.com&#10;another@example.com"></textarea></label>
-<label class="check"><input id="consent" type="checkbox" required form="sendForm"> I confirm these recipients agreed to receive this email.</label></section>
-<section class="panel">
-<div class="panel-head"><div><div class="eyebrow">LIVE STATUS</div><h2>Progress monitor</h2></div><span id="statePill" class="pill">Ready</span></div>
-<div class="stats"><div class="stat"><span>Total</span><strong id="total">0</strong></div><div class="stat"><span>Sent</span><strong id="sent">0</strong></div><div class="stat"><span>Failed</span><strong id="failed">0</strong></div><div class="stat"><span>Remaining</span><strong id="remaining">0</strong></div></div>
-<div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><h3>Activity log</h3>
-<div id="log" class="log" aria-live="polite"><p class="muted">Sending results will appear here.</p></div>
-<p class="footnote">Sent means Gmail accepted the message for sending; it does not confirm Inbox delivery.</p>
-</section></div></main>
-<script>
-(() => {
-const $ = id => document.getElementById(id);
-let controller = null, stopUi = false;
-function logLine(message, kind="") { const p=document.createElement("p"); p.className=kind; p.textContent=message; $("log").prepend(p); }
-function updateCounts(e) {
-  ["total","sent","failed","remaining"].forEach(k=>{if(e[k]!==undefined) $(k).textContent=e[k];});
-  const total=Number($("total").textContent)||0, done=(Number($("sent").textContent)||0)+(Number($("failed").textContent)||0);
-  $("progressBar").style.width=(total?Math.min(100,done/total*100):0)+"%";
-}
-function handleEvent(e) {
-  if(stopUi)return; updateCounts(e);
-  if(e.type==="start"){ $("statePill").textContent="Sending"; $("status").textContent="Sending started."; logLine(`Started ${e.total} recipient(s).`); }
-  else if(e.type==="progress"){const ok=e.result==="sent";logLine(`${ok?"Accepted by Gmail":"Failed"}: ${e.recipient||"Recipient"}${e.error?" — "+e.error:""}`,ok?"success":"failure");}
-  else if(e.type==="complete"){ $("statePill").textContent="Finished"; $("status").textContent=`Finished: ${e.sent} accepted, ${e.failed} failed.`; logLine($("status").textContent); }
-  else if(e.type==="error"){ $("status").textContent=e.message||"Sending failed."; logLine($("status").textContent,"failure");}
-}
-$("sendForm").addEventListener("submit", async ev=>{
-  ev.preventDefault(); if(controller)return;
-  const gmail=$("gmail").value.trim();
-  const lines=$("recipients").value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
-  const recipients=lines.map(email=>({email}));
-  $("recipientCount").textContent=recipients.length+" found";
-  if(!gmail.toLowerCase().endsWith("@gmail.com")){$("status").textContent="Use a valid @gmail.com sender address.";return;}
-  if(!recipients.length||recipients.length>25){$("status").textContent="Enter 1–25 recipients.";return;}
-  if(!$("consent").checked){$("status").textContent="Confirm recipient permission before sending.";return;}
-    controller=new AbortController(); stopUi=false; $("sendBtn").disabled=true; $("stopBtn").disabled=false;
-  $("log").replaceChildren(); $("statePill").textContent="Connecting"; $("status").textContent="Connecting to Gmail…";
-  try {
-    const response=await fetch("/send-batch",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,
-      body:JSON.stringify({sender_name:$("senderName").value.trim(),gmail,app_password:$("appPassword").value,subject:$("subject").value.trim(),body:$("body").value,is_html:$("isHtml").checked,recipients,consent_confirmed:true})});
-    if(!response.ok){let message=`Request failed (${response.status}).`;try{const d=await response.json();message=d.message||d.error||message;}catch{}throw new Error(message);}
-    if(!response.body)throw new Error("Streaming response unavailable.");
-    const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer="";
-    while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const rows=buffer.split("\n");buffer=rows.pop();for(const row of rows){if(row.trim())try{handleEvent(JSON.parse(row));}catch{}}}
-    if(buffer.trim())try{handleEvent(JSON.parse(buffer));}catch{}
-  } catch(err) {
-    $("status").textContent=err.name==="AbortError"?"Browser request cancelled; some emails may already have been sent.":(err.message||"Sending failed.");
-    logLine($("status").textContent,"failure"); $("statePill").textContent="Stopped";
-  } finally {controller=null;$("sendBtn").disabled=false;$("stopBtn").disabled=true;}
-});
-$("stopBtn").addEventListener("click",()=>{stopUi=true;if(controller)controller.abort();});
-})();
-</script>
-</body></html>
+import os
+import re
+import ssl
+import time
+import json
+import html
+import hmac
+import hashlib
+import smtplib
+import logging
+import threading
+
+from pathlib import Path
+from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from email.message import EmailMessage
+from email.utils import formataddr, make_msgid, formatdate
+
+from flask import (
+    Flask,
+    request,
+    render_template,
+    redirect,
+    url_for,
+    jsonify,
+    session,
+    Response,
+    stream_with_context,
+)
+
+from jinja2 import TemplateNotFound
+
+
+# =====================================================
+# FLASK CONFIGURATION
+# =====================================================
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+app = Flask(
+    __name__,
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
+    static_url_path="/static",
+)
+
+handler = app
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# =====================================================
+# SECURITY / ENVIRONMENT
+# =====================================================
+
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
+LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
+
+# IMPORTANT:
+# Never generate a new random session key on every server start.
+# A stable derived key prevents Vercel instances from signing
+# cookies with different secrets when SESSION_SECRET is absent.
+if SESSION_SECRET:
+    SESSION_KEY = SESSION_SECRET
+elif LOGIN_PASSWORD:
+    SESSION_KEY = hashlib.sha256(
+        ("bulk-email-session:" + LOGIN_PASSWORD).encode("utf-8")
+    ).hexdigest()
+    logger.warning(
+        "SESSION_SECRET is missing. Using a stable key derived "
+        "from LOGIN_PASSWORD. Set a dedicated SESSION_SECRET."
+    )
+else:
+    SESSION_KEY = None
+    logger.error(
+        "SESSION_SECRET and LOGIN_PASSWORD are not configured."
+    )
+
+app.secret_key = SESSION_KEY or "unconfigured-session-key"
+
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=1),
+    MAX_CONTENT_LENGTH=1_000_000,
+)
+
+
+# =====================================================
+# SMTP SETTINGS
+# =====================================================
+
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 465
+SMTP_TIMEOUT = 20
+
+MAX_RECIPIENTS = 25
+MAX_PARALLEL_SENDS = 2
+
+# Original sending interval retained
+SEND_DELAY_SECONDS = 0.1
+
+_pacing_lock = threading.Lock()
+_last_send_started = 0.0
+
+
+# =====================================================
+# EMAIL VALIDATION
+# =====================================================
+
+EMAIL_RE = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+"
+    r"@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
+)
+
+
+def clean(value, limit=250):
+    value = str(value or "")
+    value = value.replace("\r", " ").replace("\n", " ")
+    return value.strip()[:limit]
+
+
+def valid_email(value):
+    if not isinstance(value, str):
+        return False
+
+    value = value.strip()
+
+    return (
+        len(value) <= 254
+        and bool(EMAIL_RE.fullmatch(value))
+    )
+
+
+def logged_in():
+    return session.get("authenticated") is True
+
+
+def error(message, status=400):
+    return jsonify({
+        "success": False,
+        "message": message,
+    }), status
+
+
+def event_line(data):
+    return json.dumps(data, ensure_ascii=False) + "\n"
+
+
+# =====================================================
+# HTML TO PLAIN TEXT
+# =====================================================
+
+def html_to_text(value):
+    value = str(value or "")
+
+    value = re.sub(
+        r"(?i)<\s*br\s*/?\s*>",
+        "\n",
+        value
+    )
+
+    value = re.sub(
+        r"(?i)</\s*(p|div|li|h[1-6]|tr)\s*>",
+        "\n",
+        value
+    )
+
+    value = re.sub(
+        r"(?i)<\s*li\b[^>]*>",
+        "- ",
+        value
+    )
+
+    value = re.sub(r"<[^>]*>", " ", value)
+    value = html.unescape(value)
+    value = re.sub(r"[ \t]+", " ", value)
+    value = re.sub(r" *\n *", "\n", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+
+    return value.strip()
+
+
+# =====================================================
+# RECIPIENT NORMALIZATION
+# =====================================================
+
+def normalize_recipient(item):
+
+    if isinstance(item, str):
+        item = {"email": item}
+
+    if not isinstance(item, dict):
+        return None
+
+    address = str(
+        item.get("email", "")
+    ).strip().lower()
+
+    if not valid_email(address):
+        return None
+
+    recipient = {"email": address}
+
+    for key in (
+        "name",
+        "hi",
+        "hello",
+        "thanks",
+        "ref_code",
+    ):
+        recipient[key] = clean(
+            item.get(key, ""),
+            150
+        )
+
+    return recipient
+
+
+# =====================================================
+# PERSONALIZATION
+# =====================================================
+
+def personalize(value, recipient):
+
+    result = str(value or "")
+
+    replacements = {
+        "{{hi}}": recipient.get("hi") or "Hi",
+        "{{hello}}": recipient.get("hello") or "Hello",
+        "{{thanks}}": recipient.get("thanks") or "Thank you",
+        "{{name}}": recipient.get("name") or "there",
+        "{{email}}": recipient.get("email", ""),
+        "{{ref_code}}": recipient.get("ref_code") or "",
+    }
+
+    for key, replacement in replacements.items():
+        result = result.replace(key, replacement)
+
+    return result
+
+
+# =====================================================
+# GLOBAL SEND PACING
+# =====================================================
+
+def wait_for_send_slot():
+
+    global _last_send_started
+
+    with _pacing_lock:
+
+        now = time.monotonic()
+
+        remaining = SEND_DELAY_SECONDS - (
+            now - _last_send_started
+        )
+
+        if remaining > 0:
+            time.sleep(remaining)
+
+        _last_send_started = time.monotonic()
+
+
+# =====================================================
+# BUILD EMAIL
+# =====================================================
+
+def build_message(
+    gmail,
+    sender_name,
+    subject,
+    body,
+    is_html,
+    recipient
+):
+
+    msg = EmailMessage()
+
+    msg["Subject"] = clean(
+        personalize(subject, recipient),
+        250
+    )
+
+    msg["From"] = formataddr((
+        clean(sender_name, 150),
+        gmail
+    ))
+
+    msg["To"] = recipient["email"]
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid()
+
+    content = personalize(body, recipient)
+
+    if is_html:
+
+        plain = html_to_text(content)
+
+        msg.set_content(
+            plain or
+            "Please view this message in an HTML-capable email client."
+        )
+
+        msg.add_alternative(
+            content,
+            subtype="html"
+        )
+
+    else:
+        msg.set_content(content)
+
+    return msg
+
+
+# =====================================================
+# SEND ONE EMAIL
+# =====================================================
+
+def send_one(
+    gmail,
+    app_password,
+    sender_name,
+    subject,
+    body,
+    is_html,
+    recipient
+):
+
+    message = build_message(
+        gmail,
+        sender_name,
+        subject,
+        body,
+        is_html,
+        recipient
+    )
+
+    wait_for_send_slot()
+
+    password = re.sub(
+        r"\s+",
+        "",
+        app_password
+    )
+
+    context = ssl.create_default_context()
+
+    with smtplib.SMTP_SSL(
+        SMTP_HOST,
+        SMTP_PORT,
+        context=context,
+        timeout=SMTP_TIMEOUT
+    ) as smtp:
+
+        smtp.ehlo()
+        smtp.login(gmail, password)
+
+        refused = smtp.send_message(
+            message,
+            from_addr=gmail,
+            to_addrs=[recipient["email"]]
+        )
+
+        if refused:
+            raise smtplib.SMTPRecipientsRefused(refused)
+
+
+# =====================================================
+# LOGIN
+# =====================================================
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    if logged_in():
+        return redirect(url_for("home"))
+
+    if request.method == "GET":
+        return render_template(
+            "login.html",
+            error=None
+        )
+
+    if not LOGIN_PASSWORD:
+        logger.error("LOGIN_PASSWORD is missing.")
+
+        return render_template(
+            "login.html",
+            error="LOGIN_PASSWORD is missing in Vercel settings."
+        ), 503
+
+    if not SESSION_KEY:
+        return render_template(
+            "login.html",
+            error="Session configuration is missing. Set SESSION_SECRET."
+        ), 503
+
+    submitted = str(
+        request.form.get("password", "")
+    )
+
+    if not hmac.compare_digest(
+        submitted,
+        LOGIN_PASSWORD
+    ):
+
+        return render_template(
+            "login.html",
+            error="Incorrect password."
+        ), 401
+
+    session.clear()
+    session.permanent = True
+    session["authenticated"] = True
+
+    return redirect(url_for("home"))
+
+
+# =====================================================
+# LOGOUT
+# =====================================================
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+
+    session.clear()
+
+    return redirect(url_for("login"))
+
+
+# =====================================================
+# HOME
+# =====================================================
+
+@app.route("/")
+def home():
+
+    if not logged_in():
+        return redirect(url_for("login"))
+
+    try:
+        return render_template("index.html")
+
+    except TemplateNotFound:
+
+        logger.exception("index.html template missing")
+
+        return (
+            "templates/index.html was not found.",
+            500
+        )
+
+
+# =====================================================
+# HEALTH CHECK
+# =====================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "smtp": "Gmail SMTP SSL",
+        "max_recipients": MAX_RECIPIENTS,
+        "max_parallel_sends": MAX_PARALLEL_SENDS,
+        "send_delay_seconds": SEND_DELAY_SECONDS,
+        "login_password_configured": bool(LOGIN_PASSWORD),
+        "session_secret_configured": bool(SESSION_SECRET),
+        "session_key_available": bool(SESSION_KEY),
+    })
+
+
+# =====================================================
+# FAVICON / SERVICE WORKER
+# =====================================================
+
+@app.route("/favicon.ico")
+def favicon():
+    return Response("", status=204)
+
+
+@app.route("/sw.js")
+def service_worker():
+    return Response(
+        "",
+        mimetype="application/javascript"
+    )
+
+
+# =====================================================
+# SEND BATCH
+# =====================================================
+
+@app.route("/send-batch", methods=["POST"])
+def send_batch():
+
+    if not logged_in():
+
+        return jsonify({
+            "success": False,
+            "message": "Please log in again.",
+            "login_required": True,
+        }), 401
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return error("Invalid JSON request.")
+
+    sender_name = clean(
+        data.get("sender_name", ""),
+        150
+    )
+
+    gmail = clean(
+        data.get("gmail", ""),
+        254
+    ).lower()
+
+    password = str(
+        data.get("app_password", "")
+    ).strip()
+
+    subject = clean(
+        data.get("subject", ""),
+        250
+    )
+
+    body = str(data.get("body", ""))
+
+    is_html = data.get("is_html") is True
+    incoming = data.get("recipients", [])
+
+    if (
+        not sender_name
+        or not valid_email(gmail)
+        or not gmail.endswith("@gmail.com")
+    ):
+        return error(
+            "Enter a valid Gmail sender address and name."
+        )
+
+    if not password or not subject or not body.strip():
+        return error(
+            "App Password, subject and body are required."
+        )
+
+    if len(body) > 100_000:
+        return error("Email body is too large.")
+
+    if not isinstance(incoming, list):
+        return error("Recipients must be a list.")
+
+    if data.get("consent_confirmed") is not True:
+        return error(
+            "Confirm that recipients agreed to receive these emails."
+        )
+
+    recipients = []
+    seen = set()
+    invalid = 0
+
+    for item in incoming:
+
+        recipient = normalize_recipient(item)
+
+        if not recipient:
+            invalid += 1
+            continue
+
+        address = recipient["email"]
+
+        if address in seen:
+            continue
+
+        seen.add(address)
+        recipients.append(recipient)
+
+    if not recipients:
+        return error("No valid recipients found.")
+
+    if len(recipients) > MAX_RECIPIENTS:
+        return error(
+            f"Maximum {MAX_RECIPIENTS} unique recipients per batch."
+        )
+
+    # -------------------------------------------------
+    # STREAMING PROGRESS
+    # -------------------------------------------------
+
+    def generate():
+
+        total = len(recipients)
+        sent = 0
+        failed = 0
+
+        yield event_line({
+            "type": "start",
+            "total": total,
+            "sent": 0,
+            "failed": 0,
+            "remaining": total,
+            "invalid_skipped": invalid,
+        })
+
+        with ThreadPoolExecutor(
+            max_workers=min(MAX_PARALLEL_SENDS, total)
+        ) as executor:
+
+            jobs = {
+                executor.submit(
+                    send_one,
+                    gmail,
+                    password,
+                    sender_name,
+                    subject,
+                    body,
+                    is_html,
+                    recipient,
+                ): recipient
+                for recipient in recipients
+            }
+
+            for future in as_completed(jobs):
+
+                recipient = jobs[future]
+
+                try:
+
+                    future.result()
+                    sent += 1
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "sent",
+                    }
+
+                except smtplib.SMTPAuthenticationError:
+
+                    failed += 1
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": (
+                            "Gmail authentication failed. "
+                            "Check Gmail App Password."
+                        ),
+                    }
+
+                except smtplib.SMTPRecipientsRefused:
+
+                    failed += 1
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": "Gmail refused this recipient.",
+                    }
+
+                except smtplib.SMTPResponseException as exc:
+
+                    failed += 1
+
+                    detail = (
+                        exc.smtp_error.decode(
+                            "utf-8",
+                            "replace"
+                        )
+                        if isinstance(exc.smtp_error, bytes)
+                        else str(exc.smtp_error)
+                    )
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": (
+                            f"SMTP error {exc.smtp_code}: "
+                            f"{detail[:200]}"
+                        ),
+                    }
+
+                except (
+                    smtplib.SMTPException,
+                    TimeoutError,
+                    OSError
+                ) as exc:
+
+                    failed += 1
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": (
+                            f"SMTP/network error: {str(exc)[:200]}"
+                        ),
+                    }
+
+                except Exception as exc:
+
+                    failed += 1
+
+                    logger.exception(
+                        "Unexpected email sending error"
+                    )
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": (
+                            f"Unexpected error: {type(exc).__name__}"
+                        ),
+                    }
+
+                item.update({
+                    "total": total,
+                    "sent": sent,
+                    "failed": failed,
+                    "remaining": total - sent - failed,
+                })
+
+                yield event_line(item)
+
+        yield event_line({
+            "type": "complete",
+            "success": failed == 0,
+            "message": (
+                "SMTP sending attempts finished. "
+                "SMTP acceptance does not confirm Inbox delivery."
+            ),
+            "total": total,
+            "sent": sent,
+            "failed": failed,
+            "remaining": 0,
+        })
+
+    response = Response(
+        stream_with_context(generate()),
+        content_type="application/x-ndjson; charset=utf-8"
+    )
+
+    response.headers["Cache-Control"] = (
+        "no-store, no-cache, no-transform"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Accel-Buffering"] = "no"
+
+    return response
+
+
+# =====================================================
+# ERROR HANDLERS
+# =====================================================
+
+@app.errorhandler(413)
+def request_too_large(exc):
+    return error("Request is too large.", 413)
+
+
+@app.errorhandler(404)
+def not_found(exc):
+    return jsonify({
+        "success": False,
+        "message": "Page not found."
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(exc):
+
+    logger.exception("Application internal server error")
+
+    return jsonify({
+        "success": False,
+        "message": "Internal server error. Check Vercel Runtime Logs."
+    }), 500
+
+
+# =====================================================
+# LOCAL DEVELOPMENT
+# =====================================================
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
